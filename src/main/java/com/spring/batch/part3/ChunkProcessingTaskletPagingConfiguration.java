@@ -18,39 +18,38 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.IntStream;
 
 @Configuration
 @Slf4j
-public class ChunkProcessingConfiguration {
+public class ChunkProcessingTaskletPagingConfiguration {
 
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
 
-    public ChunkProcessingConfiguration(JobBuilderFactory jobBuilderFactory, StepBuilderFactory stepBuilderFactory) {
+    public ChunkProcessingTaskletPagingConfiguration(JobBuilderFactory jobBuilderFactory, StepBuilderFactory stepBuilderFactory) {
         this.jobBuilderFactory = jobBuilderFactory;
         this.stepBuilderFactory = stepBuilderFactory;
     }
 
     @Bean
-    public Job chunkProcessingJob(){
-        return jobBuilderFactory.get("chunkProcessingJob")
+    public Job chunkProcessingTaskletPagingJob(){
+        return jobBuilderFactory.get("chunkProcessingTaskletPagingJob")
                 .incrementer(new RunIdIncrementer())
-                .start(this.taskBaseStep())
-                .next(this.chunkBaseStep())
+                .start(this.taskBaseTaskletPagingStep())
+                .next(this.chunkBaseTaskletPagingStep())
                 .build();
     }
 
     @Bean
-    public Step taskBaseStep() {
-      return stepBuilderFactory.get("taskBaseStep")
+    public Step taskBaseTaskletPagingStep() {
+      return stepBuilderFactory.get("taskBaseTaskletPagingStep")
               .tasklet(this.tasklet())
               .build();
     }
 
     @Bean
-    public Step chunkBaseStep(){
-        return stepBuilderFactory.get("chunkBaseStep")
+    public Step chunkBaseTaskletPagingStep(){
+        return stepBuilderFactory.get("chunkBaseTaskletPagingStep")
                 //처음 String : input type , 두번째 String : outputType
                 .<String, String>chunk(10) //100개의 데이터를 10개씩 나눔
                 .reader(itemReader())
@@ -78,10 +77,23 @@ public class ChunkProcessingConfiguration {
         return (contribution, chunkContext) -> {
             StepExecution stepExecution = contribution.getStepExecution();
 
+            int chunkSize = 10;
+            int fromIndex = stepExecution.getReadCount();
+            int toIndex = fromIndex + chunkSize;
 
-            log.info("task item size : {}",items.size());
+            if(fromIndex >=  items.size()){
+                return RepeatStatus.FINISHED;
+            }
 
-            return RepeatStatus.FINISHED;
+            List<String> subList = items.subList(fromIndex, toIndex);
+
+
+//            log.info("task item size : {}",items.size());
+            log.info("task item size : {}",subList.size());
+            stepExecution.setReadCount(toIndex);
+
+//            return RepeatStatus.FINISHED;
+            return RepeatStatus.CONTINUABLE; //이코드를 반복해라
         };
     }
 

@@ -2,6 +2,7 @@ package com.spring.batch.part3;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
@@ -15,42 +16,42 @@ import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.IntStream;
 
 @Configuration
 @Slf4j
-public class ChunkProcessingConfiguration {
+public class ChunkProcessingJobParametersConfiguration {
 
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
 
-    public ChunkProcessingConfiguration(JobBuilderFactory jobBuilderFactory, StepBuilderFactory stepBuilderFactory) {
+    public ChunkProcessingJobParametersConfiguration(JobBuilderFactory jobBuilderFactory, StepBuilderFactory stepBuilderFactory) {
         this.jobBuilderFactory = jobBuilderFactory;
         this.stepBuilderFactory = stepBuilderFactory;
     }
 
     @Bean
-    public Job chunkProcessingJob(){
-        return jobBuilderFactory.get("chunkProcessingJob")
+    public Job chunkProcessingJobParameterJob(){
+        return jobBuilderFactory.get("chunkProcessingJobParameterJob")
                 .incrementer(new RunIdIncrementer())
-                .start(this.taskBaseStep())
-                .next(this.chunkBaseStep())
+                .start(this.taskBaseJobParameterStep())
+                .next(this.chunkBaseJobParameterStep())
                 .build();
     }
 
     @Bean
-    public Step taskBaseStep() {
-      return stepBuilderFactory.get("taskBaseStep")
+    public Step taskBaseJobParameterStep() {
+      return stepBuilderFactory.get("taskBaseJobParameterStep")
               .tasklet(this.tasklet())
               .build();
     }
 
     @Bean
-    public Step chunkBaseStep(){
-        return stepBuilderFactory.get("chunkBaseStep")
+    public Step chunkBaseJobParameterStep(){
+        return stepBuilderFactory.get("chunkBaseJobParameterStep")
                 //처음 String : input type , 두번째 String : outputType
                 .<String, String>chunk(10) //100개의 데이터를 10개씩 나눔
                 .reader(itemReader())
@@ -77,11 +78,27 @@ public class ChunkProcessingConfiguration {
         List<String> items = getItems();
         return (contribution, chunkContext) -> {
             StepExecution stepExecution = contribution.getStepExecution();
+            JobParameters jobParameters = stepExecution.getJobParameters();
+
+            String value = jobParameters.getString("chunkSize", "10");
+            int chunkSize = StringUtils.hasLength(value) ? Integer.parseInt(value) : 10;
+
+            int fromIndex = stepExecution.getReadCount();
+            int toIndex = fromIndex + chunkSize;
+
+            if(fromIndex >=  items.size()){
+                return RepeatStatus.FINISHED;
+            }
+
+            List<String> subList = items.subList(fromIndex, toIndex);
 
 
-            log.info("task item size : {}",items.size());
+//            log.info("task item size : {}",items.size());
+            log.info("task item size : {}",subList.size());
+            stepExecution.setReadCount(toIndex);
 
-            return RepeatStatus.FINISHED;
+//            return RepeatStatus.FINISHED;
+            return RepeatStatus.CONTINUABLE; //이코드를 반복해라
         };
     }
 
